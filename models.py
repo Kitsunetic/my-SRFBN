@@ -88,7 +88,8 @@ class MeanShift(nn.Conv2d):
     
     self.weight.data = torch.eye(c).view(c, c, 1, 1)
     self.weight.data.div_(std.view(c, 1, 1, 1))
-    self.bias.data = sign * 255. * mean
+    #self.bias.data = sign * 255. * mean
+    self.bias.data = sign * mean
     self.bias.data.div_(std)
     
     for p in self.parameters():
@@ -215,16 +216,16 @@ class SRFBN(nn.Module):
       padding = 2
       kernel_size = 12
     
-    in_color_mean = color_mean[:in_channels]
-    in_color_std = color_std[:in_channels]
-    out_color_mean = color_mean[:out_channels]
-    out_color_std = color_std[:out_channels]
+    #in_color_mean = color_mean[:in_channels]
+    #in_color_std = color_std[:in_channels]
+    #out_color_mean = color_mean[:out_channels]
+    #out_color_std = color_std[:out_channels]
     
     self.n_steps = n_steps
     self.n_features = n_features
     self.upscale_factor = upscale_factor
     
-    self.sub_mean = MeanShift(in_color_mean, in_color_std, sign=-1)
+    #self.sub_mean = MeanShift(in_color_mean, in_color_std, sign=-1)
     
     # LR feature extraction block
     self.conv_in = ConvBlock(in_channels, 4*n_features, 3, act_type=act_type, norm_type=norm_type)
@@ -236,12 +237,12 @@ class SRFBN(nn.Module):
     self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
     self.conv_out = ConvBlock(n_features, out_channels, 3, act_type=act_type, norm_type=norm_type)
     
-    self.add_mean = MeanShift(out_color_mean, out_color_std, sign=1)
+    #self.add_mean = MeanShift(out_color_mean, out_color_std, sign=1)
     
   def forward(self, x):
     self._reset_state()
     
-    x = self.sub_mean(x)
+    #x = self.sub_mean(x)
     
     inter_res = F.interpolate(x, scale_factor=self.upscale_factor, mode='bilinear', align_corners=False)
     
@@ -260,6 +261,7 @@ class SRFBN(nn.Module):
       
       # add upsample(bilinear interpolation) and RB output
       h = torch.add(inter_res, h)
+      #h = self.add_mean(h)
       outs.append(h)
     
     return outs

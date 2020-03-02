@@ -21,6 +21,7 @@ parser.add_argument('--validation_split', type=float, default=0.05)
 # file system
 parser.add_argument('--dataset_path', type=str, default='../../datasets/SR_testing_datasets/Urban100')
 parser.add_argument('--result_path', type=str, default='./results')
+parser.add_argument('--model_path', type=str, default='./models')
 
 # model
 parser.add_argument('--in_channels', type=int, default=3)
