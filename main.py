@@ -1,30 +1,29 @@
-import os
 import json
+import os
 import random
 import sys
 from datetime import datetime
 
-import matplotlib.pyplot as plt
+import imageio
 import numpy as np
 import torch
 import torch.nn as nn
-import imageio
 from PIL import Image
-from tqdm import tqdm
 from torchvision import transforms
+from tqdm import tqdm
 
-import options
-import models
 import datasets
+import losses
+import models
+import options
+import train
+import utils
 
-
-def save_tensor_image(tensor: torch.Tensor, path: str):
-  img = transforms.ToPILImage()(tensor.cpu())
-  img.save(path)
 
 def main():
   args = options.parser.parse_args(sys.argv[1:])
   os.makedirs(args.result_path, exist_ok=True)
+  os.makedirs(args.model_path, exist_ok=True)
   
   device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
   
@@ -84,18 +83,12 @@ def main():
         t.update()
     
     # save result
-    tr = transforms.ToPILImage()
-    imhr = tr(hr[0].cpu())
-    imlr = tr(lr[0].cpu())
-    imhr.save(os.path.join(args.result_path, '%05d-hr.png'%epoch))
-    imlr.save(os.path.join(args.result_path, '%05d-lr.png'%epoch))
-    imhr.close()
-    imlr.close()
-    for i, sr in enumerate(sr_list):
-      imsr = tr(sr[0].cpu())
-      imsr.save(os.path.join(args.result_path, '%05d-sr%d.png'%(epoch, i)))
-      imsr.close()
-  
+    if epoch % args.save_result_interval == 0:
+      utils.save_tensor_image(hr[0], os.path.join(args.result_path, '%05d-hr.png'%epoch))
+      utils.save_tensor_image(lr[0], os.path.join(args.result_path, '%05d-lr.png'%epoch))
+      for i, sr in enumerate(sr_list):
+        utils.save_tensor_image(sr[0], os.path.join(args.result_path, '%05d-sr%d.png'%(epoch, i)))
+
   # save model
   model_path = os.path.join(args.model_path, '{}-epoch{}-loss{:.04f}.pth'.format(
                             datetime.now().strftime('%y%m%d-%H%M%S'), 
@@ -106,7 +99,7 @@ def main():
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': loss}, f)
-    
+  
   torch.set_grad_enabled(False)
   
   # save example image
@@ -118,15 +111,8 @@ def main():
   
   for i, imfile in tqdm(enumerate(result_images), total=len(result_images), 
                         desc='saving results', ncols=96, miniters=1, unit='file'):
-      img = imageio.imread(imfile).astype(np.float32) / 255.
-      img = transforms.ToTensor()(img)
-      img = img.view((1, *img.shape))
-      img = img.to(device)
-      res = model(img)
-      res = transforms.ToPILImage()(res.cpu())
       res_path = os.path.join(args.result_path, 'result-%05d.png'%i)
-      res.save()
-      res.close()
+      utils.model_large_image(model, device, imfile, res_path, args.patch_size)
 
 if __name__ == "__main__":
   main()

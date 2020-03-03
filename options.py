@@ -7,10 +7,11 @@ parser.add_argument('--black_lv', type=int, default=512)
 parser.add_argument('--white_lv', type=int, default=16383)
 
 # image preprocessing
-parser.add_argument('--patch_size', type=int, default=256)
+parser.add_argument('--patch_size', type=int, default=96)
 
 # train
 parser.add_argument('--n_epochs', type=int, default=50)
+parser.add_argument('--save_result_interval', type=int, default=5)
 
 # dataset
 parser.add_argument('--batch_size', type=int, default=1)
