@@ -18,7 +18,6 @@ parser.add_argument('--save_examples', type=int, default=5)
 parser.add_argument('--batch_size', type=int, default=1)
 parser.add_argument('--shuffle', action='store_true')
 parser.add_argument('--num_workers', type=int, default=4)
-parser.add_argument('--validation_split', type=float, default=0.05)
 
 # file system
 parser.add_argument('--dataset_path', type=str, default='../../datasets/SR_testing_datasets/Urban100')

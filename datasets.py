@@ -3,6 +3,7 @@ import pickle
 import re
 import random
 
+import rawpy
 import imageio
 import numpy as np
 import torch
@@ -10,29 +11,64 @@ from PIL import Image
 from torchvision import transforms
 
 
-class RAW2RGB(torch.utils.data.Dataset):
-  def __init__(self, dataset_path: str, black_lv=512, white_lv=16384):
+class SRRAW(torch.utils.data.Dataset):
+  def __init__(self, dataset_path: str, patch_size: int, black_lv=512, white_lv=16384):
+    super(SRRAW, self).__init__()
+    self.patch_size = patch_size
     self.black_lv = black_lv
     self.white_lv = white_lv
     
-    self.file_list = []
-    for file in os.listdir(dataset_path):
-      if re.match('\\d{5}\\.pkl', file):
-        self.file_list.append(os.path.join(dataset_path, file))
-    
-    self.transform = transforms.ToTensor()
+    self.image_files = []
+    for fname in os.listdir(dataset_path):
+      name, ext = os.path.splitext(fname)
+      if ext.lower() != '.arw':
+        continue
+      
+      lrpath = os.path.join(dataset_path, fname)
+      hrpath = os.path.join(dataset_path, name + '.JPG')
+      self.image_files.append((hrpath, lrpath))
 
-  def __getitem__(self, idx: int):
-    with open(self.file_list[idx], 'rb') as f:
-      data = pickle.load(f)
+  def __getitem__(self, index):
+    hrpath, lrpath = self.image_files[index]
     
-    lr = self.transform(data['lr'])
-    hr = self.transform(data['hr'])
+    # load images
+    with rawpy.imread(lrpath) as raw:
+      lr = raw.raw_image_visible.copy()[8:-8, 8:-8]
+    hr = imageio.imread(hrpath)
     
-    return lr, hr
+    # crop
+    if hr.shape[0] < lr.shape[0]:
+      lr = lr[224:-224, :]
+    
+    # make patch
+    p = self.patch_size
+    h, w = lr.shape
+    dh = random.randint(0, h-p)
+    dw = random.randint(0, w-p)
+    hr = hr[dh:dh+p, dw:dw+p, :]
+    lr = lr[dh:dh+p, dw:dw+p]
+    
+    # norm
+    hr = hr.astype(np.float32) / 255.
+    lr = (lr.astype(np.float32)-self.black_lv) / (self.white_lv-self.black_lv)
+    
+    # make raw to 4ch
+    lr_ = np.zeros((p//2, p//2, 4), dtype=np.float32)
+    lr_[:, :, 0] = lr[0::2, 0::2]
+    lr_[:, :, 1] = lr[1::2, 0::2]
+    lr_[:, :, 2] = lr[1::2, 1::2]
+    lr_[:, :, 3] = lr[0::2, 1::2]
+    lr = lr_
+    
+    # transform
+    tr = transforms.ToTensor()
+    hr = tr(hr)
+    lr = tr(lr)
+    
+    return hr, lr
 
   def __len__(self):
-    return len(self.file_list)
+    return len(self.image_files)
 
 class ImageSet(torch.utils.data.Dataset):
   def __init__(self, dataset_path: str, patch_size: int):

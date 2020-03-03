@@ -2,6 +2,7 @@ import os
 import random
 from typing import Iterator
 
+import rawpy
 import imageio
 import numpy as np
 import torch
@@ -51,18 +52,27 @@ def image_patches(img: np.ndarray, patch_size: int) -> Iterator[np.ndarray]:
 
 def model_large_image(model: nn.Module, device: torch.device, impath: str, 
                       result_path: str, patch_size: int) -> torch.Tensor:
-  img = imageio.imread(impath).astype(np.float32) / 255.
-  dst = np.zeros((img.shape[0]*2, img.shape[1]*2, img.shape[2]), dtype=np.uint8)
-  p = patch_size * 2
-  for patch, dh, dw in image_patches(img, patch_size):
-    patch = transforms.ToTensor()(patch)
-    patch = patch.view((1, *patch.shape))
-    patch = patch.to(device)
-    res = model(patch)
-    res = transforms.ToPILImage()(res[-1][0].cpu())
-    dst[dh*2:dh*2+p, dw*2:dw*2+p, :] = np.array(res)
-    res.close()
-  imageio.imwrite(result_path, dst)
+  with rawpy.imread(impath) as raw:
+    img = raw.raw_image_visible.astype(np.float32)
+    img = (img-512) / (16383-512)
+    img_ = np.zeros((img.shape[0]//2, img.shape[1]//2, 4), dtype=np.float32)
+    img_[:, :, 0] = img[0::2, 0::2]
+    img_[:, :, 1] = img[1::2, 0::2]
+    img_[:, :, 2] = img[1::2, 1::2]
+    img_[:, :, 3] = img[0::2, 1::2]
+    img = img_
+    dst = np.zeros((img.shape[0]*2, img.shape[1]*2, 3), dtype=np.uint8)
+    
+    p = patch_size * 2
+    for patch, dh, dw in image_patches(img, patch_size):
+      patch = transforms.ToTensor()(patch)
+      patch = patch.view((1, *patch.shape))
+      patch = patch.to(device)
+      res = model(patch)
+      res = transforms.ToPILImage()(res[-1][0].cpu())
+      dst[dh*2:dh*2+p, dw*2:dw*2+p, :] = np.array(res)
+      res.close()
+    imageio.imwrite(result_path, dst)
 
 if __name__ == "__main__":
   img = imageio.imread('test.png')

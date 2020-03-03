@@ -193,8 +193,6 @@ class SRFBN(nn.Module):
                n_steps: int, 
                n_groups: int, 
                upscale_factor: int, 
-               color_mean: List[float], 
-               color_std: List[float],
                act_type='relu', 
                norm_type=None):
     super(SRFBN, self).__init__()
@@ -216,16 +214,9 @@ class SRFBN(nn.Module):
       padding = 2
       kernel_size = 12
     
-    #in_color_mean = color_mean[:in_channels]
-    #in_color_std = color_std[:in_channels]
-    #out_color_mean = color_mean[:out_channels]
-    #out_color_std = color_std[:out_channels]
-    
     self.n_steps = n_steps
     self.n_features = n_features
     self.upscale_factor = upscale_factor
-    
-    #self.sub_mean = MeanShift(in_color_mean, in_color_std, sign=-1)
     
     # LR feature extraction block
     self.conv_in = ConvBlock(in_channels, 4*n_features, 3, act_type=act_type, norm_type=norm_type)
@@ -237,12 +228,8 @@ class SRFBN(nn.Module):
     self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
     self.conv_out = ConvBlock(n_features, out_channels, 3, act_type=act_type, norm_type=norm_type)
     
-    #self.add_mean = MeanShift(out_color_mean, out_color_std, sign=1)
-    
   def forward(self, x):
     self._reset_state()
-    
-    #x = self.sub_mean(x)
     
     inter_res = F.interpolate(x, scale_factor=self.upscale_factor, mode='bilinear', align_corners=False)
     
@@ -261,7 +248,67 @@ class SRFBN(nn.Module):
       
       # add upsample(bilinear interpolation) and RB output
       h = torch.add(inter_res, h)
-      #h = self.add_mean(h)
+      outs.append(h)
+    
+    return outs
+
+  def _reset_state(self):
+    self.block.reset_state()
+
+class SRFBN_RAW(nn.Module):
+  def __init__(self, 
+               device: torch.device,
+               n_features: int, 
+               n_steps: int, 
+               n_groups: int, 
+               act_type='relu', 
+               norm_type=None):
+    super(SRFBN_RAW, self).__init__()
+    
+    stride = 2
+    padding = 2
+    kernel_size = 6
+    
+    self.device = device
+    self.n_steps = n_steps
+    self.n_features = n_features
+    
+    # LR feature extraction block
+    self.conv_in = ConvBlock(4, 4*n_features, 3, act_type=act_type, norm_type=norm_type)
+    self.feat_in = ConvBlock(4*n_features, n_features, 1, act_type=act_type, norm_type=norm_type)
+    
+    # basic block
+    self.block = FeedbackBlock(device, n_features, n_groups, 2, act_type=act_type, norm_type=norm_type)
+    
+    self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
+    self.conv_out = ConvBlock(n_features, 3, 3, act_type=act_type, norm_type=norm_type)
+    
+  def forward(self, x):
+    self._reset_state()
+    
+    b, c, h, w = x.size()
+    xd = torch.zeros((b, 3, h, w)).to(self.device)
+    xd[:, 0, :, :] = x[:, 0, :, :]
+    xd[:, 1, :, :] = (x[:, 1, :, :] + x[:, 3, :, :]) / 2
+    xd[:, 2, :, :] = x[:, 2, :, :]
+    
+    inter_res = F.interpolate(xd, scale_factor=2, mode='bilinear', align_corners=False)
+    
+    # LRFB - LR Feature Block
+    x = self.conv_in(x)
+    x = self.feat_in(x)
+    
+    # FB - Feedback Block
+    outs = []
+    for _ in range(self.n_steps):
+      h = self.block(x)
+      
+      # RB - Reconstruction Block
+      h = self.out(h)
+      h = self.conv_out(h)
+      
+      # add upsample(bilinear interpolation) and RB output
+      h = torch.add(inter_res, h)
       outs.append(h)
     
     return outs

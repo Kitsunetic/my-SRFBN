@@ -29,33 +29,20 @@ def main():
   device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
   
   # load dataset
-  trainset = datasets.ImageSet(args.dataset_path, args.patch_size)
+  #trainset = datasets.ImageSet(args.dataset_path, args.patch_size)
+  trainset = datasets.SRRAW(args.dataset_path, args.patch_size)
   trainloader = torch.utils.data.DataLoader(trainset, 
                                             batch_size=args.batch_size,
                                             shuffle=args.shuffle,
                                             num_workers=args.num_workers)
   
-  # load color_mean
-  #color_path = os.path.join(args.dataset_path, 'color.json')
-  #with open(color_path, 'r') as f:
-  #  data = json.load(f)
-  #  color_mean = data['color_mean']
-  #  color_std = data['color_std']
-  color_mean = [0., 0., 0.]
-  color_std = [0., 0., 0.]
-  
   # make model
-  model = models.SRFBN(device=device,
-                       in_channels=args.in_channels,
-                       out_channels=args.out_channels,
-                       n_features=args.n_features,
-                       n_steps=args.n_steps,
-                       n_groups=args.n_groups,
-                       upscale_factor=args.scale,
-                       color_mean=color_mean,
-                       color_std=color_std,
-                       act_type='relu',
-                       norm_type=None)
+  model = models.SRFBN_RAW(device=device,
+                           n_features=args.n_features,
+                           n_steps=args.n_steps,
+                           n_groups=args.n_groups,
+                           act_type='relu',
+                           norm_type=None)
   model = model.to(device)
   
   # make loss
@@ -71,7 +58,7 @@ def main():
       for batch_idx, (hr, lr) in enumerate(trainloader):
         hr, lr = hr.to(device), lr.to(device)
         sr_list = model(lr)
-        sr = sr_list[-1][0]
+        sr = sr_list[-1]
         loss = criterion(sr, hr)
         
         optimizer.zero_grad()
@@ -86,7 +73,16 @@ def main():
     # save result
     if epoch % args.save_result_interval == 0:
       utils.save_tensor_image(hr[0], os.path.join(args.result_path, '%05d-hr.png'%epoch))
-      utils.save_tensor_image(lr[0], os.path.join(args.result_path, '%05d-lr.png'%epoch))
+      lr_ = np.array(transforms.ToPILImage()(lr[0].cpu()), dtype=np.float32)
+      lr__ = np.zeros((lr_.shape[0], lr_.shape[1], 3), dtype=np.float32)
+      lr__[:, :, 0] = lr_[:, :, 0]
+      lr__[:, :, 1] = (lr_[:, :, 1] + lr_[:, :, 3]) / 2
+      lr__[:, :, 2] = lr_[:, :, 2]
+      lr__ = lr__.astype(np.uint8)
+      lr__ = Image.fromarray(lr__)
+      lr__.save(os.path.join(args.result_path, '%05d-lr.png'%epoch))
+      lr__.close()
+      #utils.save_tensor_image(lr[0], os.path.join(args.result_path, '%05d-lr.png'%epoch))
       for i, sr in enumerate(sr_list):
         utils.save_tensor_image(sr[0], os.path.join(args.result_path, '%05d-sr%d.png'%(epoch, i)))
 
@@ -106,7 +102,7 @@ def main():
   # save example image
   result_images = []
   for file in os.listdir(args.dataset_path):
-    if os.path.splitext(file)[1].lower() in ['.jpg', '.png']:
+    if os.path.splitext(file)[1].lower() in ['.arw']:
       image_file = os.path.join(args.dataset_path, file)
       result_images.append(image_file)
   result_images = random.sample(result_images, args.save_examples)
