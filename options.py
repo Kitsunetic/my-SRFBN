@@ -12,6 +12,7 @@ parser.add_argument('--patch_size', type=int, default=96)
 # train
 parser.add_argument('--n_epochs', type=int, default=50)
 parser.add_argument('--save_result_interval', type=int, default=5)
+parser.add_argument('--save_examples', type=int, default=5)
 
 # dataset
 parser.add_argument('--batch_size', type=int, default=1)

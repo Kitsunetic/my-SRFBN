@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import random
 import sys
 from datetime import datetime
@@ -58,7 +59,8 @@ def main():
   model = model.to(device)
   
   # make loss
-  criterion = nn.L1Loss()
+  #criterion = nn.L1Loss()
+  criterion = losses.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
   criterion = criterion.to(device)
   optimizer = torch.optim.Adam(model.parameters())
   
@@ -66,19 +68,19 @@ def main():
   for epoch in range(1, args.n_epochs+1):
     with tqdm(desc='[%04d/%04d]'%(epoch, args.n_epochs), total=len(trainloader), 
               unit='batch', ncols=96, miniters=1) as t:
-      losses = []
+      loss_list = []
       for batch_idx, (hr, lr) in enumerate(trainloader):
         hr, lr = hr.to(device), lr.to(device)
         sr_list = model(lr)
-        sr = sr_list[-1][0]
+        sr = sr_list[-1]
         loss = criterion(sr, hr)
         
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         
-        losses.append(loss.item())
-        mean_loss = sum(losses) / len(losses)
+        loss_list.append(loss.item())
+        mean_loss = sum(loss_list) / len(loss_list)
         t.set_postfix_str('loss %.4f'%mean_loss)
         t.update()
     
@@ -93,7 +95,7 @@ def main():
   model_path = os.path.join(args.model_path, '{}-epoch{}-loss{:.04f}.pth'.format(
                             datetime.now().strftime('%y%m%d-%H%M%S'), 
                             epoch,
-                            sum(losses)/len(losses)))
+                            sum(loss_list)/len(loss_list)))
   with open(model_path, 'wb') as f:
     torch.save({'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -108,9 +110,11 @@ def main():
     if os.path.splitext(file)[1].lower() in ['.jpg', '.png']:
       image_file = os.path.join(args.dataset_path, file)
       result_images.append(image_file)
+  result_images = random.sample(result_images, args.save_examples)
   
   for i, imfile in tqdm(enumerate(result_images), total=len(result_images), 
                         desc='saving results', ncols=96, miniters=1, unit='file'):
+      shutil.copy(imfile, os.path.josin(args.result_path, 'result-%05d-org.png'%i))
       res_path = os.path.join(args.result_path, 'result-%05d.png'%i)
       utils.model_large_image(model, device, imfile, res_path, args.patch_size)
 
