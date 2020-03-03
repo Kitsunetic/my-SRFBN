@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import shutil
 import sys
 from datetime import datetime
 
@@ -108,9 +109,11 @@ def main():
     if os.path.splitext(file)[1].lower() in ['.jpg', '.png']:
       image_file = os.path.join(args.dataset_path, file)
       result_images.append(image_file)
+  result_images = random.sample(result_images, args.save_examples)
   
   for i, imfile in tqdm(enumerate(result_images), total=len(result_images), 
                         desc='saving results', ncols=96, miniters=1, unit='file'):
+      shutil.copy(imfile, os.path.join(args.result_path, 'result-%05d-org.png'%i))
       res_path = os.path.join(args.result_path, 'result-%05d.png'%i)
       utils.model_large_image(model, device, imfile, res_path, args.patch_size)
 
