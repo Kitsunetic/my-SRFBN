@@ -58,7 +58,7 @@ def main():
       for batch_idx, (hr, lr) in enumerate(trainloader):
         hr, lr = hr.to(device), lr.to(device)
         sr_list = model(lr)
-        sr = sr_list[-1]
+        sr = sr_list[-1] # output of feedback network forms list
         loss = criterion(sr, hr)
         
         optimizer.zero_grad()
@@ -73,16 +73,7 @@ def main():
     # save result
     if epoch % args.save_result_interval == 0:
       utils.save_tensor_image(hr[0], os.path.join(args.result_path, '%05d-hr.png'%epoch))
-      lr_ = np.array(transforms.ToPILImage()(lr[0].cpu()), dtype=np.float32)
-      lr__ = np.zeros((lr_.shape[0], lr_.shape[1], 3), dtype=np.float32)
-      lr__[:, :, 0] = lr_[:, :, 0]
-      lr__[:, :, 1] = (lr_[:, :, 1] + lr_[:, :, 3]) / 2
-      lr__[:, :, 2] = lr_[:, :, 2]
-      lr__ = lr__.astype(np.uint8)
-      lr__ = Image.fromarray(lr__)
-      lr__.save(os.path.join(args.result_path, '%05d-lr.png'%epoch))
-      lr__.close()
-      #utils.save_tensor_image(lr[0], os.path.join(args.result_path, '%05d-lr.png'%epoch))
+      utils.save_tensor_image(lr[0], os.path.join(args.result_path, '%05d-lr.png'%epoch))
       for i, sr in enumerate(sr_list):
         utils.save_tensor_image(sr[0], os.path.join(args.result_path, '%05d-sr%d.png'%(epoch, i)))
 

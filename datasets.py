@@ -70,6 +70,58 @@ class SRRAW(torch.utils.data.Dataset):
   def __len__(self):
     return len(self.image_files)
 
+class RAW2RAW(torch.utils.data.Dataset):
+  def __init__(self, dataset_path: str, patch_size: int, black_lv=512, white_lv=16384):
+    super(RAW2RAW, self).__init__()
+    self.patch_size = patch_size
+    self.black_lv = black_lv
+    self.white_lv = white_lv
+    
+    self.image_files = []
+    for fname in os.listdir(dataset_path):
+      name, ext = os.path.splitext(fname)
+      if ext.lower() == '.arw':
+        fpath = os.path.join(dataset_path, fname)
+        self.image_files.append(fpath)
+
+  def __getitem__(self, index):
+    # load images
+    impath = self.image_files[index]
+    with rawpy.imread(impath) as raw:
+      img = raw.raw_image_visible.copy()
+
+    # make patch
+    p = self.patch_size
+    h, w = img.shape
+    dh = random.randint(0, h-p)
+    dw = random.randint(0, w-p)
+    img = img[dh:dh+p, dw:dw+p]
+    
+    # norm
+    img = img.astype(np.float32)
+    img = (img-self.black_lv) / (self.white_lv-self.black_lv)
+    
+    # make raw to 4ch
+    img_ = np.zeros((p//2, p//2, 4), dtype=np.float32)
+    img_[:, :, 0] = img[0::2, 0::2]
+    img_[:, :, 1] = img[1::2, 0::2]
+    img_[:, :, 2] = img[1::2, 1::2]
+    img_[:, :, 3] = img[0::2, 1::2]
+    img = img_
+    
+    # make lr image
+    lr = img[::2, ::2, :]
+    
+    # transform
+    tr = transforms.ToTensor()
+    hr = tr(img)
+    lr = tr(lr)
+    
+    return hr, lr
+
+  def __len__(self):
+    return len(self.image_files)
+
 class ImageSet(torch.utils.data.Dataset):
   def __init__(self, dataset_path: str, patch_size: int):
     super(ImageSet, self).__init__()
