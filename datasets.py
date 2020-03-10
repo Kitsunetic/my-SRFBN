@@ -9,14 +9,17 @@ import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
+import cv2
+
+import utils
 
 
 class SRRAW(torch.utils.data.Dataset):
-  def __init__(self, dataset_path: str, patch_size: int, black_lv=512, white_lv=16384):
+  def __init__(self, dataset_path: str, patch_size: int, white_lv=16384, black_lv=512):
     super(SRRAW, self).__init__()
     self.patch_size = patch_size
-    self.black_lv = black_lv
     self.white_lv = white_lv
+    self.black_lv = black_lv
     
     self.image_files = []
     for fname in os.listdir(dataset_path):
@@ -43,29 +46,35 @@ class SRRAW(torch.utils.data.Dataset):
     # make patch
     p = self.patch_size
     h, w = lr.shape
-    dh = random.randint(0, h-p)
-    dw = random.randint(0, w-p)
+    dh, dw = random.randint(0, h-p), random.randint(0, w-p)
+    dh, dw = dh - dh%2, dw - dw%2
     hr = hr[dh:dh+p, dw:dw+p, :]
     lr = lr[dh:dh+p, dw:dw+p]
-    
+
     # norm
     hr = hr.astype(np.float32) / 255.
-    lr = (lr.astype(np.float32)-self.black_lv) / (self.white_lv-self.black_lv)
+    lr = utils.norm(lr)
     
-    # make raw to 4ch
-    lr_ = np.zeros((p//2, p//2, 4), dtype=np.float32)
-    lr_[:, :, 0] = lr[0::2, 0::2]
-    lr_[:, :, 1] = lr[1::2, 0::2]
-    lr_[:, :, 2] = lr[1::2, 1::2]
-    lr_[:, :, 3] = lr[0::2, 1::2]
-    lr = lr_
+    # get wb
+    lr = utils.demosaic_bayer(lr)
+    pp = utils.demosaic(lr)
+    wb = utils.calculate_wb(pp, hr)
+    
+    # adjust wb
+    lr[..., 0] *= wb[0]
+    lr[..., 1] *= wb[1]
+    lr[..., 2] *= wb[1]
+    lr[..., 3] *= wb[2]
+    lr = utils.percentile(lr, 99)
+    lr = utils.norm(lr, lr.max(), lr.min())
     
     # transform
     tr = transforms.ToTensor()
     hr = tr(hr)
     lr = tr(lr)
+    pp = tr(pp)
     
-    return hr, lr
+    return hr, lr, pp
 
   def __len__(self):
     return len(self.image_files)
@@ -92,17 +101,18 @@ class RAW2RAW(torch.utils.data.Dataset):
 
     # make patch
     p = self.patch_size
+    p2 = 2 * p # make 4ch == resize 0.5
     h, w = img.shape
-    dh = random.randint(0, h-p)
-    dw = random.randint(0, w-p)
-    img = img[dh:dh+p, dw:dw+p]
+    dh = random.randint(0, h-p2)
+    dw = random.randint(0, w-p2)
+    img = img[dh:dh+p2, dw:dw+p2]
     
     # norm
     img = img.astype(np.float32)
     img = (img-self.black_lv) / (self.white_lv-self.black_lv)
     
     # make raw to 4ch
-    img_ = np.zeros((p//2, p//2, 4), dtype=np.float32)
+    img_ = np.zeros((p, p, 4), dtype=np.float32)
     img_[:, :, 0] = img[0::2, 0::2]
     img_[:, :, 1] = img[1::2, 0::2]
     img_[:, :, 2] = img[1::2, 1::2]
@@ -110,7 +120,7 @@ class RAW2RAW(torch.utils.data.Dataset):
     img = img_
     
     # make lr image
-    lr = img[::2, ::2, :]
+    lr = cv2.resize(img, (p//2, p//2), interpolation=cv2.INTER_CUBIC)
     
     # transform
     tr = transforms.ToTensor()
@@ -166,3 +176,35 @@ class ImageSet(torch.utils.data.Dataset):
 
   def __len__(self):
     return len(self.image_files)
+
+class SRRAW64(torch.utils.data.Dataset):
+  def __init__(self, dataset_path: str, patch_size: int):
+    super(SRRAW64, self).__init__()
+    self.patch_size = patch_size
+    
+    self.file_list = list(map(lambda x: os.path.join(dataset_path, '%05d.pkl'%x), range(32)))
+
+  def __getitem__(self, index):
+    with open(self.file_list[index], 'rb') as f:
+      data = pickle.load(f)
+    hr = data['hr']
+    lr = data['lr']
+    wb2 = data['wb2']
+    wb3 = data['wb3']
+    
+    # make patch
+    p = self.patch_size
+    h, w = lr.shape[:2]
+    dh, dw = random.randint(0, h-p), random.randint(0, w-p)
+    lr = lr[dh:dh+p, dw:dw+p, :]
+    hr = hr[dh*2:(dh+p)*2, dw*2:(dw+p)*2]
+    
+    # tensor transform
+    tr = transforms.ToTensor()
+    lr = tr(lr)
+    hr = tr(hr)
+    
+    return lr, hr, wb2, wb3
+
+  def __len__(self):
+    return len(self.file_list)

@@ -12,7 +12,6 @@ parser.add_argument('--patch_size', type=int, default=96)
 # train
 parser.add_argument('--n_epochs', type=int, default=50)
 parser.add_argument('--save_result_interval', type=int, default=5)
-parser.add_argument('--save_examples', type=int, default=5)
 
 # dataset
 parser.add_argument('--batch_size', type=int, default=1)
@@ -22,7 +21,8 @@ parser.add_argument('--num_workers', type=int, default=4)
 # file system
 parser.add_argument('--dataset_path', type=str, default='../../datasets/SR_testing_datasets/Urban100')
 parser.add_argument('--result_path', type=str, default='./results')
-parser.add_argument('--model_path', type=str, default='./models')
+parser.add_argument('--pretrained_path', type=str)
+parser.add_argument('--checkpoint_path', type=str)
 
 # model
 parser.add_argument('--in_channels', type=int, default=3)

@@ -283,16 +283,10 @@ class SRFBN_RAW(nn.Module):
     self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
     self.conv_out = ConvBlock(n_features, 3, 3, act_type=act_type, norm_type=norm_type)
     
-  def forward(self, x):
+  def forward(self, x, pp):
     self._reset_state()
     
-    b, c, h, w = x.size()
-    xd = torch.zeros((b, 3, h, w)).to(self.device)
-    xd[:, 0, :, :] = x[:, 0, :, :]
-    xd[:, 1, :, :] = (x[:, 1, :, :] + x[:, 3, :, :]) / 2
-    xd[:, 2, :, :] = x[:, 2, :, :]
-    
-    inter_res = F.interpolate(xd, scale_factor=2, mode='bilinear', align_corners=False)
+    inter_res = F.interpolate(pp, scale_factor=2, mode='bilinear', align_corners=False)
     
     # LRFB - LR Feature Block
     x = self.conv_in(x)
@@ -309,6 +303,7 @@ class SRFBN_RAW(nn.Module):
       
       # add upsample(bilinear interpolation) and RB output
       h = torch.add(inter_res, h)
+      
       outs.append(h)
     
     return outs

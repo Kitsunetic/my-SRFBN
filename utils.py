@@ -1,16 +1,16 @@
 import os
 import random
-from typing import Iterator
+from typing import Iterator, Tuple
 
-import rawpy
+import cv2
 import imageio
 import numpy as np
+import rawpy
 import torch
 import torch.nn as nn
 from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
-
 
 _to_pil_image = transforms.ToPILImage()
 
@@ -74,7 +74,91 @@ def model_large_image(model: nn.Module, device: torch.device, impath: str,
       res.close()
     imageio.imwrite(result_path, dst)
 
-if __name__ == "__main__":
-  img = imageio.imread('test.png')
-  for i, patch in tqdm(enumerate(image_patches(img, 96))):
-    imageio.imsave('results/%04d.png'%i, patch)
+def save_4ch_image(img: np.ndarray, path: str, white_lv=16383, black_lv=512):
+  # convert float32 to 16bit
+  img_ = (img*(white_lv-black_lv) + black_lv).astype(np.uint16)
+  
+  # convert 4ch image into bayer
+  h, w = img.shape[:2]
+  bayer = np.zeros((h*2, w*2), dtype=np.uint16)
+  bayer[0::2, 0::2] = img_[:, :, 0]
+  bayer[1::2, 0::2] = img_[:, :, 1]
+  bayer[1::2, 1::2] = img_[:, :, 2]
+  bayer[0::2, 1::2] = img_[:, :, 3]
+  
+  # convert bayer to RGB
+  rgb16 = cv2.cvtColor(bayer, cv2.COLOR_BAYER_BG2RGB)
+  rgb8 = (255 * (rgb16.astype(np.float32) - black_lv) / (white_lv - black_lv)).astype(np.uint8)
+  rgb8_pil = Image.fromarray(rgb8)
+  rgb8_pil.save(path)
+  rgb8_pil.close()
+
+def demosaic(img4ch):
+  h, w = img4ch.shape[:2]
+  out = np.zeros((h, w, 3), dtype=np.float32)
+  out[:, :, 0] = img4ch[:, :, 0]
+  out[:, :, 1] = (img4ch[:, :, 1] + img4ch[:, :, 2]) / 2
+  out[:, :, 2] = img4ch[:, :, 3]
+  return out
+
+def demosaic_tensor(img4ch):
+  h, w = img4ch.shape[1:3]
+  out = np.zeros((h, w, 3), dtype=np.float32)
+  out[:, :, 0] = img4ch[0, :, :]
+  out[:, :, 1] = (img4ch[1, :, :] + img4ch[2, :, :]) / 2
+  out[:, :, 2] = img4ch[3, :, :]
+  return out
+
+def demosaic_bayer(bayer):
+  h, w = bayer.shape
+  out = np.zeros((h//2, w//2, 4), dtype=bayer.dtype)
+  out[:, :, 0] = bayer[0::2, 0::2]
+  out[:, :, 1] = bayer[1::2, 0::2]
+  out[:, :, 2] = bayer[0::2, 1::2]
+  out[:, :, 3] = bayer[1::2, 1::2]
+  return out
+
+def adjust_wb(img, wb):
+  img[:, :, 0] *= wb[0].item()
+  img[:, :, 1] *= wb[1].item()
+  img[:, :, 2] *= wb[3].item()
+  return img
+
+def calculate_wb(rgb1, rgb2):
+  wb = [rgb1[:, :, 0].mean() / (rgb2[:, :, 0].mean() + 1e-8),
+        rgb1[:, :, 1].mean() / (rgb2[:, :, 1].mean() + 1e-8),
+        rgb1[:, :, 2].mean() / (rgb2[:, :, 2].mean() + 1e-8)]
+  wb = np.array(wb, dtype=np.float32)
+  return wb
+
+def normalization(img, percentile):
+  u = np.percentile(img, percentile)
+  d = np.percentile(img, 100-percentile)
+  img[img > u] = u
+  u, d = img.max(), img.min()
+  img = (img - d) / (u - d) * 255.
+  img = img.astype(np.uint8)
+  return img
+
+def norm(img, white=16383, black=512):
+  img = (img.astype(np.float32) - black) / (white - black) 
+  return img
+
+def percentile(img, percentile=99):
+  up = np.percentile(img, percentile)
+  img[img > up] = up
+  return img
+
+def patch(img, patch_size):
+  p = patch_size
+  if len(img.shape) == 2:
+    h, w = img.shape
+    c = 1
+  else:
+    h, w, c = img.shape
+    
+  dh, dw = random.randint(0, h-p), random.randint(0, w-p)
+  
+  out = np.zeros((p, p, c), dtype=img.dtype)
+  out = img[dh:dh+p, dw:dw+p]
+  return out
