@@ -1,9 +1,10 @@
 import os
 import random
-from typing import Iterator, Tuple
+from typing import Iterator, List, Optional, Tuple, Union
 
 import cv2
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import rawpy
 import torch
@@ -110,6 +111,7 @@ def demosaic_tensor(img4ch):
   return out
 
 def demosaic_bayer(bayer):
+  """RGGB"""
   h, w = bayer.shape
   out = np.zeros((h//2, w//2, 4), dtype=bayer.dtype)
   out[:, :, 0] = bayer[0::2, 0::2]
@@ -121,7 +123,7 @@ def demosaic_bayer(bayer):
 def adjust_wb(img, wb):
   img[:, :, 0] *= wb[0].item()
   img[:, :, 1] *= wb[1].item()
-  img[:, :, 2] *= wb[3].item()
+  img[:, :, 2] *= wb[2].item()
   return img
 
 def calculate_wb(rgb1, rgb2):
@@ -141,8 +143,8 @@ def normalization(img, percentile):
   return img
 
 def norm(img, white=16383, black=512):
-  img = (img.astype(np.float32) - black) / (white - black) 
-  return img
+  out = (img.astype(np.float32) - black) / (white - black) 
+  return out
 
 def percentile(img, percentile=99):
   up = np.percentile(img, percentile)
@@ -162,3 +164,26 @@ def patch(img, patch_size):
   out = np.zeros((p, p, c), dtype=img.dtype)
   out = img[dh:dh+p, dw:dw+p]
   return out
+
+def to_numpy_image(img: torch.Tensor) -> Union[np.ndarray, List[np.ndarray]]:
+  def _to_numpy_image(img: torch.Tensor):
+    channels, h, w = img.shape
+    out = np.zeros((h, w, channels), dtype=np.float32)
+    for c in range(channels):
+      out[:, :, c] = img[c, :, :]
+    return out
+  
+  if len(img.shape) == 3:
+    return _to_numpy_image(img)
+  elif len(img.shape) == 4:
+    out = []
+    for i in range(img.shape[0]):
+      out.append(_to_numpy_image(img[i]))
+    return out
+  else:
+    raise NotImplementedError('img\'s shape must have 3 or 4 length')
+
+def save_graph(data: List[float], path: str):
+  plt.plot(data)
+  plt.savefig(path)
+  plt.close()

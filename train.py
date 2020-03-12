@@ -2,9 +2,10 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Tuple
+from typing import Iterable, List, Tuple
 
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -54,22 +55,22 @@ class Trainer:
       self.model.eval()
   
   def train(self):
+    history = {'loss': []}
     for epoch in range(1, self.n_epochs+1):
       with tqdm(desc='[%04d/%04d]'%(epoch, self.n_epochs),
                 total=len(self.train_loader),
-                unit='batch', ncols=96, miniters=1) as t:
+                unit='batch', ncols=128, miniters=1) as t:
         loss_list = []
-        for batch_idx, (hr, lr, pp) in enumerate(self.train_loader):
+        for batch_idx, (hr, lr, wb, pp) in enumerate(self.train_loader):
           hr = hr.to(self.device)
           lr = lr.to(self.device)
-          pp = pp.to(self.device)
           
-          sr_list = self.model(lr, pp)
+          self.optimizer.zero_grad()
+          sr_list = self.model(lr)
           sr = sr_list[-1]
           
           # calculate loss
           loss = self.criterion(sr, hr)
-          self.optimizer.zero_grad()
           loss.backward()
           self.optimizer.step()
           
@@ -79,34 +80,56 @@ class Trainer:
           t.set_postfix_str('loss %.4f'%mean_loss)
           t.update()
           
+          # update history
+          history['loss'].append(loss.item())
+          
       # save hr, lr, sr as example image
-      self.save_example(epoch, hr[0].cpu().detach(), lr[0].cpu().detach(), sr[0].cpu().detach())
+      self.save_example(epoch, hr[0].cpu().detach(), lr[0].cpu().detach(), sr[0].cpu().detach(), pp[0].cpu().detach(), wb[0])
       
       # test
       self.validation()
+      
+    # save result graph
+    print('Save history[loss] graph into \'loss.png\' ...')
+    utils.save_graph(history['loss'], os.path.join(self.result_path, 'loss.png'))
     
     # save model
     self.save_model()
   
-  def save_example(self, epoch, hr, lr, sr):
-    tr = transforms.ToPILImage()
-    
+  def save_example(self, epoch, hr, lr, sr, pp, wb):
     hrpath = os.path.join(self.result_path, '%04d-hr.png'%epoch)
     lrpath = os.path.join(self.result_path, '%04d-lr.png'%epoch)
     srpath = os.path.join(self.result_path, '%04d-sr.png'%epoch)
+    pppath = os.path.join(self.result_path, '%04d-pp.png'%epoch)
     
-    hr = tr(hr)
-    hr.save(hrpath)
-    hr.close()
+    #hr = utils.adjust_wb(hr, wb)
+    #lr = utils.adjust_wb(lr, wb)
+    #sr = utils.adjust_wb(sr, wb)
     
-    sr = tr(sr)
-    sr.save(srpath)
-    sr.close()
-    
+    # decrease channel. 4ch -> 3ch
+    hr = utils.demosaic_tensor(hr)
     lr = utils.demosaic_tensor(lr)
-    lr = utils.norm(lr, lr.max(), lr.min())
+    sr = utils.demosaic_tensor(sr)
+    
+    #hr = utils.percentile(hr)
+    #lr = utils.percentile(lr)
+    #sr = utils.percentile(sr)
+    
+    #hr = utils.norm(hr, hr.max(), hr.min())
+    #lr = utils.norm(lr, lr.max(), lr.min())
+    #sr = utils.norm(sr, sr.max(), sr.min())
+    
+    hr = (255. * hr).astype(np.uint8)
     lr = (255. * lr).astype(np.uint8)
+    sr = (255. * sr).astype(np.uint8)
+    
+    imageio.imwrite(hrpath, hr)
     imageio.imwrite(lrpath, lr)
+    imageio.imwrite(srpath, sr)
+    
+    pp = utils.to_numpy_image(pp)
+    pp = (255. * pp).astype(np.uint8)
+    imageio.imwrite(pppath, pp)
     
   def test(self):
     #torch.set_grad_enabled(False)
@@ -129,5 +152,5 @@ class Trainer:
   def save_checkpoint(self):
     
     pass
-
+  
   # TODO: make losses list to make loss plot
