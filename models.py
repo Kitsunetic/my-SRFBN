@@ -281,12 +281,12 @@ class SRFBN_RAW(nn.Module):
     self.block = FeedbackBlock(device, n_features, n_groups, 2, act_type=act_type, norm_type=norm_type)
     
     self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
-    self.conv_out = ConvBlock(n_features, 4, 3, act_type=act_type, norm_type=norm_type)
+    self.conv_out = ConvBlock(n_features, 3, 3, act_type=act_type, norm_type=norm_type)
     
-  def forward(self, x):
+  def forward(self, x, inter_res):
     self._reset_state()
     
-    inter_res = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
+    #inter_res = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
     
     # LRFB - LR Feature Block
     x = self.conv_in(x)

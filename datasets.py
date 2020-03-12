@@ -26,15 +26,15 @@ class SRRAW(torch.utils.data.Dataset):
       name, ext = os.path.splitext(fname)
       if ext.lower() != '.arw':
         continue
-      
-      path = os.path.join(dataset_path, fname)
-      self.image_files.append(path)
+      hrpath = os.path.join(dataset_path, name + '.JPG')
+      lrpath = os.path.join(dataset_path, fname)
+      self.image_files.append((hrpath, lrpath))
 
   def __getitem__(self, index):
-    path = self.image_files[index]
+    hrpath, lrpath = self.image_files[index]
     
     # load images
-    with rawpy.imread(path) as raw:
+    with rawpy.imread(lrpath) as raw:
       pp = raw.postprocess(gamma=(1, 1),
                            no_auto_bright=True,
                            use_camera_wb=True,
@@ -44,41 +44,58 @@ class SRRAW(torch.utils.data.Dataset):
       
       bayer = raw.raw_image_visible.copy()
     
+    hr = imageio.imread(hrpath)
+    hr = hr.astype(np.float32) / 255.
+    
+    # crop
+    bayer = bayer[8:-8, 8:-8]
+    pp = pp[8:-8, 8:-8, :]
+    if bayer.shape[0] > hr.shape[0]:
+      bayer = bayer[224:-224, :]
+      pp = pp[224:-224, :, :]
+    
     # calculate wb
     rggb = utils.demosaic_bayer(bayer)
     rggb = utils.percentile(rggb, 95)
     rggb = utils.norm(rggb)
     rgb = utils.demosaic(rggb)
-    wb = utils.calculate_wb(pp, rgb)
+    wb1 = utils.calculate_wb(hr, rgb)
+    wb2 = utils.calculate_wb(hr, pp)
     
     # make patch
-    p = self.patch_size*2
+    p = self.patch_size
     h, w = rggb.shape[:2]
     dh, dw = random.randint(0, h-p), random.randint(0, w-p)
     dh, dw = dh - dh%2, dw - dw%2
-    hr = rggb[dh:dh+p, dw:dw+p]
+    lr = rggb[dh:dh+p, dw:dw+p, :]
+    hr = hr[dh*2:(dh+p)*2, dw*2:(dw+p)*2, :]
+    inter_res = pp[dh*2:(dh+p)*2, dw*2:(dw+p)*2, :]
     
-    # norm
-    hr[:, :, 0] *= wb[0]
-    hr[:, :, 1] *= wb[1]
-    hr[:, :, 2] *= wb[1]
-    hr[:, :, 3] *= wb[2]
-    hr = utils.percentile(hr, 95)
+    # lr wb
+    lr[:, :, 0] *= wb1[0]
+    lr[:, :, 1] *= wb1[1]
+    lr[:, :, 2] *= wb1[1]
+    lr[:, :, 3] *= wb1[2]
+    lr = utils.percentile(lr, 95)
+    lr = utils.norm(lr, lr.max(), lr.min())
+    
+    # hr norm
     hr = utils.norm(hr, hr.max(), hr.min())
     
-    # make lr
-    #lr = cv2.resize(hr, (p//2, p//2), interpolation=cv2.INTER_CUBIC)
-    #lr = utils.percentile(lr, 95)
-    #lr = utils.norm(lr, lr.max(), lr.min())
-    lr = hr[::2, ::2, :]
+    # inter_res wb
+    inter_res[:, :, 0] *= wb2[0]
+    inter_res[:, :, 1] *= wb2[1]
+    inter_res[:, :, 2] *= wb2[2]
+    inter_res = utils.percentile(inter_res, 95)
+    inter_res = utils.norm(inter_res, inter_res.max(), inter_res.min())
     
     # transform
     tr = transforms.ToTensor()
     hr = tr(hr)
     lr = tr(lr)
-    pp = tr(pp)
+    inter_res = tr(inter_res)
     
-    return hr, lr, wb, pp
+    return hr, lr, inter_res
 
   def __len__(self):
     return len(self.image_files)
