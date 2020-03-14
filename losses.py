@@ -312,3 +312,16 @@ class Contextual_Loss(nn.Module):
     if torch.isnan(CX_loss):
       raise ValueError('NaN in computing CX_loss')
     return CX_loss
+
+class CX_L1(nn.Module):
+  def __init__(self, layers={"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64, CX_rate=1.0, L1_rate=1.0):
+    super(CX_L1, self).__init__()
+    
+    self.CX = Contextual_Loss(layers, max_1d_size=max_1d_size)
+    self.L1 = nn.L1Loss()
+    
+    self.CX_rate = CX_rate
+    self.L1_rate = L1_rate
+    
+  def forward(self, image, gt):
+    return self.CX_rate * self.CX(image, gt) + self.L1_rate * self.L1(image,gt)

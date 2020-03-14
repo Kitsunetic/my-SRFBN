@@ -39,13 +39,14 @@ def main():
                            n_features=args.n_features,
                            n_steps=args.n_steps,
                            n_groups=args.n_groups,
-                           act_type='relu',
+                           act_type='prelu',
                            norm_type=None)
   model = model.to(device)
   
   # make loss
   #criterion = nn.L1Loss()
-  criterion = losses.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
+  #criterion = losses.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
+  criterion = losses.CX_L1()
   criterion = criterion.to(device)
   optimizer = torch.optim.Adam(model.parameters())
   
@@ -55,10 +56,11 @@ def main():
                           criterion=criterion,
                           optimizer=optimizer,
                           train_loader=trainloader,
-                          test_loader=None,
                           val_loader=None,
                           n_epochs=args.n_epochs,
+                          patch_size=args.patch_size,
                           result_path=args.result_path,
+                          test_path=args.test_path,
                           pretrained_path=args.pretrained_path)
   trainer.train()
   

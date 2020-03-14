@@ -281,12 +281,17 @@ class SRFBN_RAW(nn.Module):
     self.block = FeedbackBlock(device, n_features, n_groups, 2, act_type=act_type, norm_type=norm_type)
     
     self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
-    self.conv_out = ConvBlock(n_features, 3, 3, act_type=act_type, norm_type=norm_type)
+    self.conv_out = ConvBlock(n_features, 4, 3, act_type=act_type, norm_type=norm_type)
+    self.conv_channel = nn.Sequential(
+      ConvBlock(4, 32, 3, act_type=act_type, norm_type=norm_type),
+      ConvBlock(32, 16, 3, act_type=act_type, norm_type=norm_type),
+      ConvBlock(16, 3, 3, act_type=act_type, norm_type=norm_type)
+    )
     
-  def forward(self, x, inter_res):
+  def forward(self, x):
     self._reset_state()
     
-    #inter_res = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
+    inter_res = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
     
     # LRFB - LR Feature Block
     x = self.conv_in(x)
@@ -304,8 +309,8 @@ class SRFBN_RAW(nn.Module):
       # add upsample(bilinear interpolation) and RB output
       h = torch.add(inter_res, h)
       
+      h = self.conv_channel(h)
       outs.append(h)
-    
     return outs
 
   def _reset_state(self):

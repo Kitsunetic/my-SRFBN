@@ -21,6 +21,7 @@ parser.add_argument('--num_workers', type=int, default=4)
 # file system
 parser.add_argument('--dataset_path', type=str, default='../../datasets/SR_testing_datasets/Urban100')
 parser.add_argument('--result_path', type=str, default='./results')
+parser.add_argument('--test_path', type=str)
 parser.add_argument('--pretrained_path', type=str)
 parser.add_argument('--checkpoint_path', type=str)
 

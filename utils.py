@@ -21,7 +21,7 @@ def save_tensor_image(tensor: torch.Tensor, path: str):
   img.save(path)
   img.close()
 
-def image_patches(img: np.ndarray, patch_size: int) -> Iterator[np.ndarray]:
+def image_patches(img: np.ndarray, patch_size: int) -> Iterator[Tuple[np.ndarray, int, int]]:
   p = patch_size
   h, w = img.shape[:2]
   
@@ -143,13 +143,29 @@ def normalization(img, percentile):
   return img
 
 def norm(img, white=16383, black=512):
-  out = (img.astype(np.float32) - black) / (white - black) 
+  if white == black:
+    return img
+  
+  out = (img.astype(np.float32) - black) / (white - black)
   return out
 
 def percentile(img, percentile=99):
-  up = np.percentile(img, percentile)
-  img[img > up] = up
+  if len(img.shape) == 3:
+    h, w, c = img.shape
+    for i in range(c):
+      ch = img[..., i]
+      u = np.percentile(ch, percentile)
+      ch[ch > u] = u
+      img[..., i] = ch
+  else:
+    up = np.percentile(img, percentile)
+    img[img > up] = up
   return img
+
+def limit(a: np.ndarray, maximum=1, minimum=0):
+  a[a > maximum] = maximum
+  a[a < minimum] = minimum
+  return a
 
 def patch(img, patch_size):
   p = patch_size
@@ -166,6 +182,8 @@ def patch(img, patch_size):
   return out
 
 def to_numpy_image(img: torch.Tensor) -> Union[np.ndarray, List[np.ndarray]]:
+  img = img.cpu().detach()
+  
   def _to_numpy_image(img: torch.Tensor):
     channels, h, w = img.shape
     out = np.zeros((h, w, channels), dtype=np.float32)
