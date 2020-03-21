@@ -45,8 +45,8 @@ def main():
   
   # make loss
   #criterion = nn.L1Loss()
-  #criterion = losses.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
-  criterion = losses.CX_L1()
+  criterion = losses.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
+  #criterion = losses.CX_L1()
   criterion = criterion.to(device)
   optimizer = torch.optim.Adam(model.parameters())
   
