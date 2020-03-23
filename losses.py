@@ -20,13 +20,13 @@ class VGG19(nn.Module):
     for x in range(4):
       self.slice1.add_module(str(x), vgg_pretrained_features[x])
     for x in range(4, 9):
-        self.slice2.add_module(str(x), vgg_pretrained_features[x])
+      self.slice2.add_module(str(x), vgg_pretrained_features[x])
     for x in range(9, 18):
-        self.slice3.add_module(str(x), vgg_pretrained_features[x])
+      self.slice3.add_module(str(x), vgg_pretrained_features[x])
     for x in range(18, 27):
-        self.slice4.add_module(str(x), vgg_pretrained_features[x])
+      self.slice4.add_module(str(x), vgg_pretrained_features[x])
     for x in range(27, 36):
-        self.slice5.add_module(str(x), vgg_pretrained_features[x])
+      self.slice5.add_module(str(x), vgg_pretrained_features[x])
     if not requires_grad:
       for param in self.parameters():
         param.requires_grad = False
@@ -34,13 +34,13 @@ class VGG19(nn.Module):
   def forward(self, x):
     h = self.slice1(x)
     h_relu1_2 = h
-    h = self.slice2(x)
+    h = self.slice2(h)
     h_relu2_2 = h
-    h = self.slice3(x)
+    h = self.slice3(h)
     h_relu3_4 = h
-    h = self.slice4(x)
+    h = self.slice4(h)
     h_relu4_4 = h
-    h = self.slice5(x)
+    h = self.slice5(h)
     h_relu5_4 = h
     
     vgg_outputs = namedtuple('VggOutputs', ['relu1_2', 'relu2_2', 'relu3_4', 'relu4_4', 'relu5_4'])
@@ -230,10 +230,27 @@ def calculate_contextual_bilateral_loss(x: torch.Tensor,
   return cx_loss
 
 class ContextualLoss(nn.Module):
+  """
+  Creates a criterion that measures the contextual loss.
+
+  Parameters
+  ---
+  band_width : int, optional
+    a band_width parameter described as :math:`h` in the paper.
+  loss_type : str, optional
+    a loss type to measure the distance between features.
+    Note: `l1` and `l2` frequently raises OOM.
+  use_vgg : bool, optional
+    if you want not to use VGG feature, set this `False`.
+  vgg_layer : str, optional
+    intermidiate layer name for VGG feature.
+    Now we support layer names:
+      `['relu1_2', 'relu2_2', 'relu3_4', 'relu4_4', 'relu5_4']`
+  """
   def __init__(self, 
                bnadwidth=0.5, 
                loss_type='cosine', 
-               use_vgg=False, 
+               use_vgg=True, 
                vgg_layer='relu3_4',
                eps=1e-5):
     super(ContextualLoss, self).__init__()
@@ -286,7 +303,7 @@ class ContextualBilateralLoss(nn.Module):
   band_width : int, optional
       a band_width parameter described as :math:`h` in the paper.
   use_vgg : bool, optional
-      if you want to use VGG feature, set this `True`.
+      if you want not to use VGG feature, set this `False`.
   vgg_layer : str, optional
       intermidiate layer name for VGG feature.
       Now we support layer names:
@@ -297,7 +314,7 @@ class ContextualBilateralLoss(nn.Module):
                weight_sp=0.1,
                bandwidth=0.5,
                loss_type='cosine',
-               use_vgg=False,
+               use_vgg=True,
                vgg_layer='relu3_4',
                eps=1e-5):
     super(ContextualBilateralLoss, self).__init__()
@@ -334,7 +351,7 @@ class ContextualBilateralLoss(nn.Module):
       
       # picking up vgg feature map
       x = getattr(self.vgg_model(x), self.vgg_layer)
-      y = getattr(self.vgg_model(x), self.vgg_layer)
+      y = getattr(self.vgg_model(y), self.vgg_layer)
       
     return calculate_contextual_bilateral_loss(x, y, 
                                                weight_sp=self.weight_sp,

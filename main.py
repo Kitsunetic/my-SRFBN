@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 import datasets
 import losses
+import losses2
 import models
 import options
 import train
@@ -41,13 +42,12 @@ def main():
                            n_groups=args.n_groups,
                            act_type='prelu',
                            norm_type=None)
-  model = model.to(device)
   
   # make loss
   #criterion = nn.L1Loss()
-  criterion = losses.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
-  #criterion = losses.CX_L1()
-  criterion = criterion.to(device)
+  #criterion = losses2.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
+  #criterion = losses.ContextualLoss()
+  criterion = losses.ContextualBilateralLoss()
   optimizer = torch.optim.Adam(model.parameters())
   
   # train
