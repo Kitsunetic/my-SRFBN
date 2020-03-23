@@ -6,7 +6,6 @@ from typing import Iterable, List, Tuple
 
 import rawpy
 import imageio
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
