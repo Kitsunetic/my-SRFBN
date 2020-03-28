@@ -44,9 +44,6 @@ def main():
                            norm_type=None)
   
   # make loss
-  #criterion = nn.L1Loss()
-  #criterion = losses2.Contextual_Loss({"conv_1_1": 1.0, "conv_3_2": 1.0}, max_1d_size=64)
-  #criterion = losses.ContextualLoss()
   criterion = losses.ContextualBilateralLoss()
   optimizer = torch.optim.Adam(model.parameters())
   

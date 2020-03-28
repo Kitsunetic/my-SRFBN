@@ -94,7 +94,7 @@ class MeanShift(nn.Conv2d):
     
     for p in self.parameters():
       p.requires_grad = False
-    
+
 class FeedbackBlock(nn.Module):
   def __init__(self,
                device: torch.device,
@@ -213,6 +213,10 @@ class SRFBN(nn.Module):
       stride = 8
       padding = 2
       kernel_size = 12
+    elif upscale_factor == 10:
+      stride = 10
+      padding = 2
+      kernel_size = 14
     
     self.n_steps = n_steps
     self.n_features = n_features
@@ -282,11 +286,14 @@ class SRFBN_RAW(nn.Module):
     
     self.out = DeconvBlock(n_features, n_features, kernel_size, stride, padding, act_type='prelu', norm_type=norm_type)
     self.conv_out = ConvBlock(n_features, 4, 3, act_type=act_type, norm_type=norm_type)
+    """
     self.conv_channel = nn.Sequential(
       ConvBlock(4, 32, 3, act_type=act_type, norm_type=norm_type),
       ConvBlock(32, 16, 3, act_type=act_type, norm_type=norm_type),
       ConvBlock(16, 3, 3, act_type=act_type, norm_type=norm_type)
     )
+    """
+    self.conv_channel = ConvBlock(4, 3, 1, act_type=act_type, norm_type=norm_type)
     
   def forward(self, x):
     self._reset_state()
